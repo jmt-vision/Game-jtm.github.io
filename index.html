@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>런닝맨 코인 배틀</title>
+  <script src="https://unpkg.com/html5-qrcode"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #0f172a; color: #fff; font-family: 'Pretendard', -apple-system, sans-serif; display: flex; flex-direction: column; height: 100vh; }
+    #login-screen { display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100%; padding: 25px; }
+    .login-box { background: #1e293b; padding: 30px; border-radius: 20px; width: 100%; max-width: 360px; text-align: center; border: 1px solid #334155; }
+    .login-box h2 { margin-bottom: 20px; color: #facc15; }
+    .input-field { width: 100%; padding: 14px; border-radius: 10px; border: 1px solid #475569; background: #0f172a; color: white; font-size: 1.1rem; margin-bottom: 15px; text-align: center; }
+    .team-select { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px; }
+    .team-btn { padding: 15px; border-radius: 10px; border: 2px solid transparent; font-weight: bold; font-size: 1.1rem; cursor: pointer; background: #334155; color: #94a3b8; }
+    .team-btn.selected-A { border-color: #3b82f6; background: #1d4ed8; color: white; }
+    .team-btn.selected-B { border-color: #ef4444; background: #b91c1c; color: white; }
+    .start-btn { width: 100%; padding: 15px; border-radius: 10px; border: none; background: #facc15; color: #0f172a; font-size: 1.1rem; font-weight: 800; cursor: pointer; }
+    #game-screen { display: none; flex-direction: column; height: 100%; }
+    header { padding: 15px 20px; background: #1e293b; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #334155; }
+    .user-info { font-weight: bold; font-size: 1.05rem; }
+    .coin-badge { background: #f59e0b; color: #000; padding: 6px 14px; border-radius: 20px; font-weight: 800; font-size: 1.1rem; }
+    .scanner-area { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px; }
+    #reader-wrapper { width: 100%; max-width: 350px; border-radius: 16px; overflow: hidden; border: 3px solid #475569; background: #000; }
+    .status-panel { width: 100%; max-width: 350px; background: #1e293b; padding: 18px; border-radius: 14px; margin-top: 20px; text-align: center; line-height: 1.5; }
+    .timer-text { font-size: 1.5rem; font-weight: 800; color: #facc15; }
+    #quiz-modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.9); z-index: 50; align-items: center; justify-content: center; padding: 20px; }
+    .quiz-card { background: #1e293b; width: 100%; max-width: 360px; padding: 25px; border-radius: 20px; border: 2px solid #facc15; text-align: center; }
+    .quiz-num { color: #facc15; font-weight: bold; margin-bottom: 10px; }
+    .quiz-text { font-size: 1.3rem; font-weight: bold; margin-bottom: 20px; word-break: keep-all; }
+    .submit-btn { width: 100%; padding: 14px; border-radius: 10px; border: none; background: #10b981; color: white; font-size: 1.1rem; font-weight: bold; cursor: pointer; }
+  </style>
+</head>
+<body>
+
+  <div id="login-screen">
+    <div class="login-box">
+      <h2>🏃 런닝맨 코인 배틀</h2>
+      <input type="text" id="username-input" class="input-field" placeholder="이름(닉네임) 입력">
+      <div class="team-select">
+        <button id="btn-A" class="team-btn" onclick="window.selectTeam('A')">A팀 (BLUE)</button>
+        <button id="btn-B" class="team-btn" onclick="window.selectTeam('B')">B팀 (RED)</button>
+      </div>
+      <button class="start-btn" onclick="window.registerUser()">게임 입장하기</button>
+    </div>
+  </div>
+
+  <div id="game-screen">
+    <header>
+      <div class="user-info" id="header-info">-</div>
+      <div class="coin-badge">🪙 <span id="my-coins">0</span></div>
+    </header>
+    <div class="scanner-area">
+      <div id="reader-wrapper"><div id="reader"></div></div>
+      <div class="status-panel" id="status-panel">상대 팀 조끼의 QR코드를 비춰주세요!</div>
+    </div>
+  </div>
+
+  <div id="quiz-modal">
+    <div class="quiz-card">
+      <div class="quiz-num" id="quiz-num">QUIZ</div>
+      <div class="quiz-text" id="quiz-text">문제 로딩 중...</div>
+      <input type="text" id="answer-input" class="input-field" placeholder="정답 입력" autocomplete="off">
+      <button class="submit-btn" onclick="window.submitAnswer()">정답 제출 (+1 코인)</button>
+    </div>
+  </div>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+    import { getFirestore, collection, doc, addDoc, getDoc, updateDoc, onSnapshot, arrayUnion } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyCHKU00wz54QnkhTXuZeHH8OBUBNbz70qY",
+      authDomain: "game-jtm.firebaseapp.com",
+      projectId: "game-jtm",
+      storageBucket: "game-jtm.firebasestorage.app",
+      messagingSenderId: "702131812126",
+      appId: "1:702131812126:web:e14a8d2300c4a4ccf0bb0f"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
+    const QUIZ_POOL = [
+      { id: 1, q: "대한민국의 수도는?", a: "서울" },
+      { id: 2, q: "태양계에서 가장 큰 행성은?", a: "목성" },
+      { id: 3, q: "물의 화학식은?", a: "H2O" },
+      { id: 4, q: "훈민정음을 창제한 왕은?", a: "세종대왕" },
+      { id: 5, q: "1년은 몇 주일까요? (숫자만)", a: "52" },
+      { id: 6, q: "세계에서 가장 높은 산은?", a: "에베레스트" },
+      { id: 7, q: "거북선을 만든 장군은?", a: "이순신" },
+      { id: 8, q: "빛의 삼원색은 빨강, 초록, 그리고 무엇?", a: "파랑" },
+      { id: 9, q: "프랑스의 수도는?", a: "파리" },
+      { id: 10, q: "피아노 건반은 총 몇 개일까요? (숫자만)", a: "88" }
+    ];
+
+    let selectedTeam = "";
+    let userId = localStorage.getItem("rm_fs_uid");
+    let userData = null;
+    let isScanningLocked = false;
+    let currentQuizObj = null;
+
+    window.selectTeam = (t) => {
+      selectedTeam = t;
+      document.getElementById("btn-A").className = `team-btn ${t === 'A' ? 'selected-A' : ''}`;
+      document.getElementById("btn-B").className = `team-btn ${t === 'B' ? 'selected-B' : ''}`;
+    };
+
+    window.registerUser = async () => {
+      const name = document.getElementById("username-input").value.trim();
+      if (!name || !selectedTeam) return alert("이름을 입력하고 팀을 선택해 주세요.");
+
+      try {
+        const docRef = await addDoc(collection(db, "rm_users"), {
+          name: name,
+          team: selectedTeam,
+          coins: 0,
+          solvedIds: [],
+          currentQuizId: null,
+          cooldownUntil: 0,
+          penaltyUntil: 0
+        });
+        userId = docRef.id;
+        localStorage.setItem("rm_fs_uid", userId);
+        initGame();
+      } catch (err) {
+        alert("Firestore 연결 오류: 콘솔을 확인해 주세요.");
+        console.error(err);
+      }
+    };
+
+    async function initGame() {
+      const userRef = doc(db, "rm_users", userId);
+      const snap = await getDoc(userRef);
+      if (!snap.exists()) {
+        localStorage.removeItem("rm_fs_uid");
+        return;
+      }
+
+      document.getElementById("login-screen").style.display = "none";
+      document.getElementById("game-screen").style.display = "flex";
+
+      onSnapshot(userRef, (snapshot) => {
+        if (!snapshot.exists()) {
+          localStorage.removeItem("rm_fs_uid");
+          location.reload();
+          return;
+        }
+        userData = snapshot.data();
+        document.getElementById("header-info").innerText = `[${userData.team}팀] ${userData.name}`;
+        document.getElementById("my-coins").innerText = userData.coins || 0;
+      });
+
+      const now = Date.now();
+      const initVal = snap.data();
+      if (initVal.penaltyUntil > now) {
+        startTimer(Math.ceil((initVal.penaltyUntil - now) / 1000), true);
+      } else if (initVal.cooldownUntil > now) {
+        startTimer(Math.ceil((initVal.cooldownUntil - now) / 1000), false);
+      }
+
+      const scanner = new Html5Qrcode("reader");
+      scanner.start({ facingMode: "environment" }, { fps: 10, qrbox: 240 }, onScan)
+        .catch(() => {
+          document.getElementById("status-panel").innerText = "카메라 권한을 허용해 주세요 (HTTPS 환경 필수).";
+        });
+    }
+
+    async function onScan(decodedText) {
+      if (isScanningLocked || !userData) return;
+      isScanningLocked = true;
+      if (navigator.vibrate) navigator.vibrate(200);
+
+      if (decodedText === `TARGET_${userData.team}`) {
+        alert("아군 조끼입니다! 상대 팀 조끼를 스캔하세요.");
+        isScanningLocked = false;
+        return;
+      }
+      if (!decodedText.startsWith("TARGET_")) {
+        alert("유효하지 않은 조끼 QR코드입니다.");
+        isScanningLocked = false;
+        return;
+      }
+
+      const now = Date.now();
+      if (userData.penaltyUntil > now) {
+        startTimer(Math.ceil((userData.penaltyUntil - now) / 1000), true);
+        return;
+      }
+      if (userData.cooldownUntil > now) {
+        startTimer(Math.ceil((userData.cooldownUntil - now) / 1000), false);
+        return;
+      }
+
+      const solved = userData.solvedIds || [];
+      let assigned = null;
+      if (userData.currentQuizId) {
+        assigned = QUIZ_POOL.find(q => q.id === userData.currentQuizId);
+      }
+
+      if (!assigned) {
+        const available = QUIZ_POOL.filter(q => !solved.includes(q.id));
+        if (available.length === 0) {
+          alert("준비된 모든 문제를 정복했습니다!");
+          isScanningLocked = false;
+          return;
+        }
+        assigned = available[Math.floor(Math.random() * available.length)];
+        await updateDoc(doc(db, "rm_users", userId), { currentQuizId: assigned.id });
+      }
+
+      currentQuizObj = assigned;
+      document.getElementById("quiz-num").innerText = `문제 #${assigned.id}`;
+      document.getElementById("quiz-text").innerText = assigned.q;
+      document.getElementById("answer-input").value = "";
+      document.getElementById("quiz-modal").style.display = "flex";
+    }
+
+    window.submitAnswer = async () => {
+      const ans = document.getElementById("answer-input").value.trim();
+      if (!ans || !currentQuizObj) return;
+
+      document.getElementById("quiz-modal").style.display = "none";
+      const now = Date.now();
+      const userRef = doc(db, "rm_users", userId);
+
+      if (ans.toLowerCase() === currentQuizObj.a.toLowerCase()) {
+        const newCoins = (userData.coins || 0) + 1;
+
+        await updateDoc(userRef, {
+          coins: newCoins,
+          solvedIds: arrayUnion(currentQuizObj.id),
+          currentQuizId: null,
+          cooldownUntil: now + 30000
+        });
+
+        await addDoc(collection(db, "rm_logs"), {
+          text: `[${userData.team}팀] ${userData.name} 님 #${currentQuizObj.id}번 정답! (+1 코인)`,
+          timestamp: now
+        });
+
+        alert("정답입니다! 🪙 +1 코인을 획득했습니다!");
+        startTimer(30, false);
+      } else {
+        await updateDoc(userRef, {
+          penaltyUntil: now + 20000
+        });
+
+        await addDoc(collection(db, "rm_logs"), {
+          text: `[${userData.team}팀] ${userData.name} 님 오답! (20초 페널티)`,
+          timestamp: now
+        });
+
+        alert("오답입니다! 20초간 스캔이 잠깁니다.");
+        startTimer(20, true);
+      }
+    };
+
+    function startTimer(seconds, isPenalty) {
+      isScanningLocked = true;
+      let remain = seconds;
+      const panel = document.getElementById("status-panel");
+      const title = isPenalty ? "🚨 오답 페널티" : "⏳ 다음 탐색 대기";
+
+      const interval = setInterval(() => {
+        panel.innerHTML = `<div class="timer-text">${title}: ${remain}초</div>잠시 후 스캔이 활성화됩니다.`;
+        remain--;
+        if (remain < 0) {
+          clearInterval(interval);
+          panel.innerText = "상대 팀 조끼의 QR코드를 비춰주세요!";
+          isScanningLocked = false;
+        }
+      }, 1000);
+    }
+
+    if (userId) initGame();
+  </script>
+</body>
+</html>
