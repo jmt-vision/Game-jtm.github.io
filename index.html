@@ -14,7 +14,6 @@
     .login-desc { font-size: 0.95rem; color: #94a3b8; margin-bottom: 25px; line-height: 1.4; }
     .input-field { width: 100%; padding: 15px; border-radius: 10px; border: 1px solid #475569; background: #0f172a; color: white; font-size: 1.15rem; margin-bottom: 18px; text-align: center; }
     .start-btn { width: 100%; padding: 15px; border-radius: 10px; border: none; background: #facc15; color: #0f172a; font-size: 1.15rem; font-weight: 800; cursor: pointer; }
-    .start-btn:active { background: #eab308; }
     
     #game-screen { display: none; flex-direction: column; height: 100%; }
     header { padding: 15px 20px; background: #1e293b; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #334155; }
@@ -38,7 +37,6 @@
 </head>
 <body>
 
-  <!-- 1. 이름 입력 화면 (팀 자동 배정) -->
   <div id="login-screen">
     <div class="login-box">
       <h2>🏃 런닝맨 코인 배틀</h2>
@@ -48,7 +46,6 @@
     </div>
   </div>
 
-  <!-- 2. QR 스캔 게임 화면 -->
   <div id="game-screen">
     <header>
       <div class="user-info" id="header-info">-</div>
@@ -60,7 +57,6 @@
     </div>
   </div>
 
-  <!-- 3. 퀴즈 모달 -->
   <div id="quiz-modal">
     <div class="quiz-card">
       <div class="quiz-num" id="quiz-num">QUIZ</div>
@@ -73,6 +69,8 @@
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
     import { getFirestore, collection, doc, setDoc, getDoc, updateDoc, addDoc, onSnapshot, arrayUnion } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+    // ★ GitHub의 quiz_data.js에서 A팀, B팀 문제 불러오기
+    import { TEAM_QUIZZES } from "./quiz_data.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyCHKU00wz54QnkhTXuZeHH8OBUBNbz70qY",
@@ -86,20 +84,7 @@
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
 
-    const QUIZ_POOL = [
-      { id: 1, q: "대한민국의 수도는?", a: "서울" },
-      { id: 2, q: "태양계에서 가장 큰 행성은?", a: "목성" },
-      { id: 3, q: "물의 화학식은?", a: "H2O" },
-      { id: 4, q: "훈민정음을 창제한 왕은?", a: "세종대왕" },
-      { id: 5, q: "1년은 몇 주일까요? (숫자만)", a: "52" },
-      { id: 6, q: "세계에서 가장 높은 산은?", a: "에베레스트" },
-      { id: 7, q: "거북선을 만든 장군은?", a: "이순신" },
-      { id: 8, q: "빛의 삼원색은 빨강, 초록, 그리고 무엇?", a: "파랑" },
-      { id: 9, q: "프랑스의 수도는?", a: "파리" },
-      { id: 10, q: "피아노 건반은 총 몇 개일까요? (숫자만)", a: "88" }
-    ];
-
-    let userId = localStorage.getItem("rm_fs_uid"); // 이름을 문서 ID로 사용
+    let userId = localStorage.getItem("rm_fs_uid");
     let userData = null;
     let isScanningLocked = false;
     let currentQuizObj = null;
@@ -109,15 +94,12 @@
       if (!name) return alert("이름을 입력해 주세요.");
 
       try {
-        // 1. 사전 등록된 명단(rm_roster)에서 이름 조회
         const rosterSnap = await getDoc(doc(db, "rm_roster", name));
         if (!rosterSnap.exists()) {
-          return alert(`'${name}' 님은 참가자 명단에 없습니다.\n오타가 없는지 확인하거나 진행자에게 문의해 주세요.`);
+          return alert(`'${name}' 님은 참가자 명단에 없습니다.\n진행자에게 명단 등록을 요청해 주세요.`);
         }
 
         const assignedTeam = rosterSnap.data().team;
-
-        // 2. 이미 생성된 유저 데이터가 있는지 확인 (재접속 시 코인 유지)
         const userRef = doc(db, "rm_users", name);
         const userSnap = await getDoc(userRef);
 
@@ -138,7 +120,7 @@
         alert(`환영합니다! [${assignedTeam}팀]으로 자동 배정되었습니다.`);
         initGame();
       } catch (err) {
-        alert("연결 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.");
+        alert("연결 오류가 발생했습니다.");
         console.error(err);
       }
     };
@@ -186,13 +168,15 @@
       isScanningLocked = true;
       if (navigator.vibrate) navigator.vibrate(200);
 
-      if (decodedText === `TARGET_${userData.team}`) {
+      const targetCode = decodedText.trim();
+
+      if (targetCode === `TARGET_${userData.team}`) {
         alert("아군 조끼입니다! 상대 팀 조끼를 스캔하세요.");
         isScanningLocked = false;
         return;
       }
-      if (!decodedText.startsWith("TARGET_")) {
-        alert("유효하지 않은 조끼 QR코드입니다.");
+      if (!targetCode.startsWith("TARGET_")) {
+        alert(`인식된 코드: [${targetCode}]\n유효하지 않은 조끼 QR코드입니다.`);
         isScanningLocked = false;
         return;
       }
@@ -207,16 +191,24 @@
         return;
       }
 
+      // 내 소속 팀(A 또는 B) 전용 문제 풀 가져오기
+      const myTeamPool = TEAM_QUIZZES[userData.team] || [];
+      if (myTeamPool.length === 0) {
+        alert("우리 팀에 배정된 문제가 없습니다.");
+        isScanningLocked = false;
+        return;
+      }
+
       const solved = userData.solvedIds || [];
       let assigned = null;
       if (userData.currentQuizId) {
-        assigned = QUIZ_POOL.find(q => q.id === userData.currentQuizId);
+        assigned = myTeamPool.find(q => q.id === userData.currentQuizId);
       }
 
       if (!assigned) {
-        const available = QUIZ_POOL.filter(q => !solved.includes(q.id));
+        const available = myTeamPool.filter(q => !solved.includes(q.id));
         if (available.length === 0) {
-          alert("준비된 모든 문제를 정복했습니다!");
+          alert("우리 팀에 준비된 모든 문제를 정복했습니다!");
           isScanningLocked = false;
           return;
         }
@@ -225,7 +217,7 @@
       }
 
       currentQuizObj = assigned;
-      document.getElementById("quiz-num").innerText = `문제 #${assigned.id}`;
+      document.getElementById("quiz-num").innerText = `[${userData.team}팀] 문제 #${assigned.id}`;
       document.getElementById("quiz-text").innerText = assigned.q;
       document.getElementById("answer-input").value = "";
       document.getElementById("quiz-modal").style.display = "flex";
@@ -239,7 +231,7 @@
       const now = Date.now();
       const userRef = doc(db, "rm_users", userId);
 
-      if (ans.toLowerCase() === currentQuizObj.a.toLowerCase()) {
+      if (ans.toLowerCase() === String(currentQuizObj.a).trim().toLowerCase()) {
         const newCoins = (userData.coins || 0) + 1;
 
         await updateDoc(userRef, {
