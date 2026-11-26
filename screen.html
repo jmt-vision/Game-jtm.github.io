@@ -19,14 +19,25 @@
     .mvp-list { list-style: none; display: flex; flex-direction: column; gap: 12px; }
     .mvp-item { background: #0f172a; padding: 14px 20px; border-radius: 12px; display: flex; justify-content: space-between; align-items: center; font-size: 1.3rem; font-weight: bold; }
     .rank-badge { display: inline-block; width: 35px; color: #facc15; }
-    .bottom-bar { display: grid; grid-template-columns: 2fr 1fr; gap: 20px; height: 150px; margin-top: 20px; }
+    .bottom-bar { display: grid; grid-template-columns: 2fr 1.2fr; gap: 20px; height: 165px; margin-top: 20px; }
     .log-box { background: #1e293b; border-radius: 16px; padding: 15px 20px; border: 1px solid #334155; overflow: hidden; }
     .log-item { font-size: 1.05rem; margin-bottom: 6px; color: #e2e8f0; }
-    .admin-box { background: #1e293b; border-radius: 16px; padding: 15px; border: 1px solid #334155; display: flex; flex-direction: column; justify-content: center; gap: 8px; }
-    .admin-box button { padding: 9px; border: none; border-radius: 8px; font-weight: bold; color: white; cursor: pointer; font-size: 0.9rem; }
+    .admin-box { background: #1e293b; border-radius: 16px; padding: 12px; border: 1px solid #334155; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .admin-box button { padding: 8px; border: none; border-radius: 8px; font-weight: bold; color: white; cursor: pointer; font-size: 0.85rem; }
     .btn-A { background: #2563eb; }
     .btn-B { background: #dc2626; }
+    .btn-roster { background: #059669; }
     .btn-reset { background: #475569; }
+
+    /* 명단 관리 모달 */
+    #roster-modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.85); z-index: 100; align-items: center; justify-content: center; }
+    .modal-content { background: #1e293b; padding: 30px; border-radius: 20px; width: 90%; max-width: 500px; border: 2px solid #475569; }
+    .modal-content h3 { margin-bottom: 15px; color: #facc15; font-size: 1.4rem; }
+    .roster-group { margin-bottom: 15px; }
+    .roster-group label { display: block; margin-bottom: 6px; font-weight: bold; }
+    .roster-group textarea { width: 100%; height: 80px; padding: 10px; border-radius: 8px; background: #0f172a; color: white; border: 1px solid #475569; font-size: 1rem; resize: none; }
+    .modal-btns { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }
+    .modal-btns button { padding: 10px 20px; border-radius: 8px; border: none; font-weight: bold; cursor: pointer; font-size: 1rem; }
   </style>
 </head>
 <body>
@@ -61,15 +72,39 @@
       <div class="log-item">실시간 작전 로그 대기 중...</div>
     </div>
     <div class="admin-box">
-      <button class="btn-A" onclick="window.givePenalty('A')">🚨 A팀 벽 기대기 파울 (-1 코인)</button>
-      <button class="btn-B" onclick="window.givePenalty('B')">🚨 B팀 벽 기대기 파울 (-1 코인)</button>
-      <button class="btn-reset" onclick="window.resetGame()">⚠️ 전체 게임 데이터 초기화</button>
+      <button class="btn-A" onclick="window.givePenalty('A')">🚨 A팀 파울 (-1)</button>
+      <button class="btn-B" onclick="window.givePenalty('B')">🚨 B팀 파울 (-1)</button>
+      <button class="btn-roster" onclick="window.openRosterModal()">📋 팀 명단 등록</button>
+      <button class="btn-reset" onclick="window.resetGame()">⚠️ 점수 초기화</button>
+    </div>
+  </div>
+
+  <!-- 사전 팀 명단 일괄 등록 모달 -->
+  <div id="roster-modal">
+    <div class="modal-content">
+      <h3>📋 사전 팀 명단 일괄 등록</h3>
+      <p style="font-size: 0.9rem; color: #94a3b8; margin-bottom: 15px;">이름을 쉼표(,) 또는 줄바꿈으로 구분해 입력하세요.</p>
+      
+      <div class="roster-group">
+        <label style="color: #60a5fa;">A팀 명단 (BLUE)</label>
+        <textarea id="roster-A" placeholder="예: 홍길동, 김철수, 이영희"></textarea>
+      </div>
+      
+      <div class="roster-group">
+        <label style="color: #f87171;">B팀 명단 (RED)</label>
+        <textarea id="roster-B" placeholder="예: 성춘향, 이몽룡, 변학도"></textarea>
+      </div>
+
+      <div class="modal-btns">
+        <button style="background:#475569; color:white;" onclick="window.closeRosterModal()">닫기</button>
+        <button style="background:#10b981; color:white;" onclick="window.saveRoster()">명단 저장하기</button>
+      </div>
     </div>
   </div>
 
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-    import { getFirestore, collection, doc, addDoc, getDocs, updateDoc, deleteDoc, onSnapshot, query, orderBy, limit } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+    import { getFirestore, collection, doc, setDoc, addDoc, getDocs, updateDoc, deleteDoc, onSnapshot, query, orderBy, limit } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyCHKU00wz54QnkhTXuZeHH8OBUBNbz70qY",
@@ -85,7 +120,7 @@
 
     let allUsers = [];
 
-    // 실시간 유저 점수 및 MVP 감시
+    // 실시간 점수 및 MVP 감시
     onSnapshot(collection(db, "rm_users"), (snapshot) => {
       allUsers = [];
       let teamA = 0, teamB = 0;
@@ -111,7 +146,7 @@
       `).join('') || '<li class="mvp-item">참가자 대기 중...</li>';
     });
 
-    // 실시간 로그 감시 (최신 4개)
+    // 실시간 로그 감시
     const logQuery = query(collection(db, "rm_logs"), orderBy("timestamp", "desc"), limit(4));
     onSnapshot(logQuery, (snapshot) => {
       const logList = document.getElementById("log-list");
@@ -126,39 +161,74 @@
       logList.innerHTML = items.join('');
     });
 
-    // 벽 기대기 파울 차감
+    // 명단 등록 모달 열기 (기존 등록된 명단 불러오기)
+    window.openRosterModal = async () => {
+      const snap = await getDocs(collection(db, "rm_roster"));
+      const listA = [], listB = [];
+      snap.forEach(d => {
+        if (d.data().team === "A") listA.push(d.id);
+        if (d.data().team === "B") listB.push(d.id);
+      });
+      document.getElementById("roster-A").value = listA.join(", ");
+      document.getElementById("roster-B").value = listB.join(", ");
+      document.getElementById("roster-modal").style.display = "flex";
+    };
+
+    window.closeRosterModal = () => {
+      document.getElementById("roster-modal").style.display = "none";
+    };
+
+    // 명단 저장
+    window.saveRoster = async () => {
+      const rawA = document.getElementById("roster-A").value;
+      const rawB = document.getElementById("roster-B").value;
+
+      const namesA = rawA.split(/[\n,]+/).map(s => s.trim()).filter(Boolean);
+      const namesB = rawB.split(/[\n,]+/).map(s => s.trim()).filter(Boolean);
+
+      // 기존 명단 삭제 후 새로 저장
+      const oldSnap = await getDocs(collection(db, "rm_roster"));
+      for (const d of oldSnap.docs) await deleteDoc(doc(db, "rm_roster", d.id));
+
+      for (const name of namesA) {
+        await setDoc(doc(db, "rm_roster", name), { team: "A" });
+      }
+      for (const name of namesB) {
+        await setDoc(doc(db, "rm_roster", name), { team: "B" });
+      }
+
+      alert(`명단 저장 완료! (A팀 ${namesA.length}명 / B팀 ${namesB.length}명)`);
+      window.closeRosterModal();
+    };
+
+    // 파울 차감
     window.givePenalty = async (team) => {
       if (!confirm(`${team}팀에게 벽 기대기 반칙 페널티(-1 코인)를 부여할까요?`)) return;
-
       let targetUser = null;
       allUsers.forEach((u) => {
         if (u.team === team && u.coins > 0) {
-          if (!targetUser || u.coins > targetUser.coins) {
-            targetUser = u;
-          }
+          if (!targetUser || u.coins > targetUser.coins) targetUser = u;
         }
       });
-
       if (targetUser) {
         await updateDoc(doc(db, "rm_users", targetUser.id), { coins: targetUser.coins - 1 });
       }
-
       await addDoc(collection(db, "rm_logs"), {
         text: `🚨 [진행자 경고] ${team}팀 벽 기대기 반칙! 팀 코인 -1 차감`,
         timestamp: Date.now()
       });
     };
 
-    // 테스트 데이터 전체 초기화
+    // 점수 및 로그 초기화 (사전 등록한 팀 명단은 유지됨)
     window.resetGame = async () => {
-      if (!confirm("모든 참가자 점수와 로그를 초기화하시겠습니까?")) return;
+      if (!confirm("모든 참가자 점수와 로그를 초기화하시겠습니까? (등록된 팀 명단은 유지됩니다)")) return;
       const usersSnap = await getDocs(collection(db, "rm_users"));
       for (const d of usersSnap.docs) await deleteDoc(doc(db, "rm_users", d.id));
 
       const logsSnap = await getDocs(collection(db, "rm_logs"));
       for (const d of logsSnap.docs) await deleteDoc(doc(db, "rm_logs", d.id));
 
-      alert("초기화 완료!");
+      alert("점수 초기화 완료!");
     };
   </script>
 </body>
