@@ -9,22 +9,26 @@
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { background: #0f172a; color: #fff; font-family: 'Pretendard', -apple-system, sans-serif; display: flex; flex-direction: column; height: 100vh; }
     #login-screen { display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100%; padding: 25px; }
-    .login-box { background: #1e293b; padding: 30px; border-radius: 20px; width: 100%; max-width: 360px; text-align: center; border: 1px solid #334155; }
-    .login-box h2 { margin-bottom: 20px; color: #facc15; }
-    .input-field { width: 100%; padding: 14px; border-radius: 10px; border: 1px solid #475569; background: #0f172a; color: white; font-size: 1.1rem; margin-bottom: 15px; text-align: center; }
-    .team-select { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px; }
-    .team-btn { padding: 15px; border-radius: 10px; border: 2px solid transparent; font-weight: bold; font-size: 1.1rem; cursor: pointer; background: #334155; color: #94a3b8; }
-    .team-btn.selected-A { border-color: #3b82f6; background: #1d4ed8; color: white; }
-    .team-btn.selected-B { border-color: #ef4444; background: #b91c1c; color: white; }
-    .start-btn { width: 100%; padding: 15px; border-radius: 10px; border: none; background: #facc15; color: #0f172a; font-size: 1.1rem; font-weight: 800; cursor: pointer; }
+    .login-box { background: #1e293b; padding: 35px 30px; border-radius: 20px; width: 100%; max-width: 360px; text-align: center; border: 1px solid #334155; }
+    .login-box h2 { margin-bottom: 10px; color: #facc15; }
+    .login-desc { font-size: 0.95rem; color: #94a3b8; margin-bottom: 25px; line-height: 1.4; }
+    .input-field { width: 100%; padding: 15px; border-radius: 10px; border: 1px solid #475569; background: #0f172a; color: white; font-size: 1.15rem; margin-bottom: 18px; text-align: center; }
+    .start-btn { width: 100%; padding: 15px; border-radius: 10px; border: none; background: #facc15; color: #0f172a; font-size: 1.15rem; font-weight: 800; cursor: pointer; }
+    .start-btn:active { background: #eab308; }
+    
     #game-screen { display: none; flex-direction: column; height: 100%; }
     header { padding: 15px 20px; background: #1e293b; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #334155; }
     .user-info { font-weight: bold; font-size: 1.05rem; }
+    .team-tag { padding: 3px 8px; border-radius: 6px; font-size: 0.9rem; margin-right: 6px; font-weight: 800; }
+    .tag-A { background: #2563eb; color: white; }
+    .tag-B { background: #dc2626; color: white; }
     .coin-badge { background: #f59e0b; color: #000; padding: 6px 14px; border-radius: 20px; font-weight: 800; font-size: 1.1rem; }
+    
     .scanner-area { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px; }
     #reader-wrapper { width: 100%; max-width: 350px; border-radius: 16px; overflow: hidden; border: 3px solid #475569; background: #000; }
     .status-panel { width: 100%; max-width: 350px; background: #1e293b; padding: 18px; border-radius: 14px; margin-top: 20px; text-align: center; line-height: 1.5; }
     .timer-text { font-size: 1.5rem; font-weight: 800; color: #facc15; }
+    
     #quiz-modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.9); z-index: 50; align-items: center; justify-content: center; padding: 20px; }
     .quiz-card { background: #1e293b; width: 100%; max-width: 360px; padding: 25px; border-radius: 20px; border: 2px solid #facc15; text-align: center; }
     .quiz-num { color: #facc15; font-weight: bold; margin-bottom: 10px; }
@@ -34,18 +38,17 @@
 </head>
 <body>
 
+  <!-- 1. 이름 입력 화면 (팀 자동 배정) -->
   <div id="login-screen">
     <div class="login-box">
       <h2>🏃 런닝맨 코인 배틀</h2>
-      <input type="text" id="username-input" class="input-field" placeholder="이름(닉네임) 입력">
-      <div class="team-select">
-        <button id="btn-A" class="team-btn" onclick="window.selectTeam('A')">A팀 (BLUE)</button>
-        <button id="btn-B" class="team-btn" onclick="window.selectTeam('B')">B팀 (RED)</button>
-      </div>
-      <button class="start-btn" onclick="window.registerUser()">게임 입장하기</button>
+      <p class="login-desc">사전 등록된 본인의 이름을 입력하면<br>소속 팀이 자동으로 배정됩니다.</p>
+      <input type="text" id="username-input" class="input-field" placeholder="이름 입력 (예: 홍길동)">
+      <button class="start-btn" onclick="window.registerUser()">입장 및 팀 확인</button>
     </div>
   </div>
 
+  <!-- 2. QR 스캔 게임 화면 -->
   <div id="game-screen">
     <header>
       <div class="user-info" id="header-info">-</div>
@@ -57,6 +60,7 @@
     </div>
   </div>
 
+  <!-- 3. 퀴즈 모달 -->
   <div id="quiz-modal">
     <div class="quiz-card">
       <div class="quiz-num" id="quiz-num">QUIZ</div>
@@ -68,7 +72,7 @@
 
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-    import { getFirestore, collection, doc, addDoc, getDoc, updateDoc, onSnapshot, arrayUnion } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+    import { getFirestore, collection, doc, setDoc, getDoc, updateDoc, addDoc, onSnapshot, arrayUnion } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyCHKU00wz54QnkhTXuZeHH8OBUBNbz70qY",
@@ -95,37 +99,46 @@
       { id: 10, q: "피아노 건반은 총 몇 개일까요? (숫자만)", a: "88" }
     ];
 
-    let selectedTeam = "";
-    let userId = localStorage.getItem("rm_fs_uid");
+    let userId = localStorage.getItem("rm_fs_uid"); // 이름을 문서 ID로 사용
     let userData = null;
     let isScanningLocked = false;
     let currentQuizObj = null;
 
-    window.selectTeam = (t) => {
-      selectedTeam = t;
-      document.getElementById("btn-A").className = `team-btn ${t === 'A' ? 'selected-A' : ''}`;
-      document.getElementById("btn-B").className = `team-btn ${t === 'B' ? 'selected-B' : ''}`;
-    };
-
     window.registerUser = async () => {
       const name = document.getElementById("username-input").value.trim();
-      if (!name || !selectedTeam) return alert("이름을 입력하고 팀을 선택해 주세요.");
+      if (!name) return alert("이름을 입력해 주세요.");
 
       try {
-        const docRef = await addDoc(collection(db, "rm_users"), {
-          name: name,
-          team: selectedTeam,
-          coins: 0,
-          solvedIds: [],
-          currentQuizId: null,
-          cooldownUntil: 0,
-          penaltyUntil: 0
-        });
-        userId = docRef.id;
+        // 1. 사전 등록된 명단(rm_roster)에서 이름 조회
+        const rosterSnap = await getDoc(doc(db, "rm_roster", name));
+        if (!rosterSnap.exists()) {
+          return alert(`'${name}' 님은 참가자 명단에 없습니다.\n오타가 없는지 확인하거나 진행자에게 문의해 주세요.`);
+        }
+
+        const assignedTeam = rosterSnap.data().team;
+
+        // 2. 이미 생성된 유저 데이터가 있는지 확인 (재접속 시 코인 유지)
+        const userRef = doc(db, "rm_users", name);
+        const userSnap = await getDoc(userRef);
+
+        if (!userSnap.exists()) {
+          await setDoc(userRef, {
+            name: name,
+            team: assignedTeam,
+            coins: 0,
+            solvedIds: [],
+            currentQuizId: null,
+            cooldownUntil: 0,
+            penaltyUntil: 0
+          });
+        }
+
+        userId = name;
         localStorage.setItem("rm_fs_uid", userId);
+        alert(`환영합니다! [${assignedTeam}팀]으로 자동 배정되었습니다.`);
         initGame();
       } catch (err) {
-        alert("Firestore 연결 오류: 콘솔을 확인해 주세요.");
+        alert("연결 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.");
         console.error(err);
       }
     };
@@ -148,7 +161,8 @@
           return;
         }
         userData = snapshot.data();
-        document.getElementById("header-info").innerText = `[${userData.team}팀] ${userData.name}`;
+        document.getElementById("header-info").innerHTML = 
+          `<span class="team-tag tag-${userData.team}">${userData.team}팀</span> ${userData.name}`;
         document.getElementById("my-coins").innerText = userData.coins || 0;
       });
 
