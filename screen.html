@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>런닝맨 코인 배틀 - 메인 전광판</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #0f172a; color: #fff; font-family: 'Pretendard', -apple-system, sans-serif; display: flex; flex-direction: column; height: 100vh; padding: 25px; overflow: hidden; }
+    h1 { text-align: center; font-size: 2.6rem; color: #facc15; margin-bottom: 20px; }
+    .grid-main { display: grid; grid-template-columns: 1.2fr 1fr; gap: 25px; flex: 1; }
+    .panel { background: #1e293b; border-radius: 20px; padding: 25px; border: 2px solid #334155; display: flex; flex-direction: column; }
+    .panel-title { font-size: 1.5rem; font-weight: 800; color: #94a3b8; margin-bottom: 20px; border-bottom: 1px solid #334155; padding-bottom: 10px; }
+    .team-score-box { flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 30px; }
+    .team-row { padding: 20px; border-radius: 16px; background: #0f172a; display: flex; justify-content: space-between; align-items: center; border-left: 10px solid; }
+    .row-A { border-color: #3b82f6; }
+    .row-B { border-color: #ef4444; }
+    .t-name { font-size: 2rem; font-weight: 800; }
+    .t-coin { font-size: 2.8rem; font-weight: 900; color: #facc15; }
+    .mvp-list { list-style: none; display: flex; flex-direction: column; gap: 12px; }
+    .mvp-item { background: #0f172a; padding: 14px 20px; border-radius: 12px; display: flex; justify-content: space-between; align-items: center; font-size: 1.3rem; font-weight: bold; }
+    .rank-badge { display: inline-block; width: 35px; color: #facc15; }
+    .bottom-bar { display: grid; grid-template-columns: 2fr 1fr; gap: 20px; height: 150px; margin-top: 20px; }
+    .log-box { background: #1e293b; border-radius: 16px; padding: 15px 20px; border: 1px solid #334155; overflow: hidden; }
+    .log-item { font-size: 1.05rem; margin-bottom: 6px; color: #e2e8f0; }
+    .admin-box { background: #1e293b; border-radius: 16px; padding: 15px; border: 1px solid #334155; display: flex; flex-direction: column; justify-content: center; gap: 8px; }
+    .admin-box button { padding: 9px; border: none; border-radius: 8px; font-weight: bold; color: white; cursor: pointer; font-size: 0.9rem; }
+    .btn-A { background: #2563eb; }
+    .btn-B { background: #dc2626; }
+    .btn-reset { background: #475569; }
+  </style>
+</head>
+<body>
+
+  <h1>🏆 RUNNING MAN COIN BATTLE</h1>
+
+  <div class="grid-main">
+    <div class="panel">
+      <div class="panel-title">🔥 실시간 팀 코인 합산</div>
+      <div class="team-score-box">
+        <div class="team-row row-A">
+          <span class="t-name" style="color:#60a5fa;">A 팀 (BLUE)</span>
+          <span class="t-coin">🪙 <span id="score-A">0</span></span>
+        </div>
+        <div class="team-row row-B">
+          <span class="t-name" style="color:#f87171;">B 팀 (RED)</span>
+          <span class="t-coin">🪙 <span id="score-B">0</span></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">👑 개인 MVP 랭킹 TOP 5</div>
+      <ul class="mvp-list" id="mvp-list">
+        <li class="mvp-item">집계 대기 중...</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="bottom-bar">
+    <div class="log-box" id="log-list">
+      <div class="log-item">실시간 작전 로그 대기 중...</div>
+    </div>
+    <div class="admin-box">
+      <button class="btn-A" onclick="window.givePenalty('A')">🚨 A팀 벽 기대기 파울 (-1 코인)</button>
+      <button class="btn-B" onclick="window.givePenalty('B')">🚨 B팀 벽 기대기 파울 (-1 코인)</button>
+      <button class="btn-reset" onclick="window.resetGame()">⚠️ 전체 게임 데이터 초기화</button>
+    </div>
+  </div>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+    import { getFirestore, collection, doc, addDoc, getDocs, updateDoc, deleteDoc, onSnapshot, query, orderBy, limit } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyCHKU00wz54QnkhTXuZeHH8OBUBNbz70qY",
+      authDomain: "game-jtm.firebaseapp.com",
+      projectId: "game-jtm",
+      storageBucket: "game-jtm.firebasestorage.app",
+      messagingSenderId: "702131812126",
+      appId: "1:702131812126:web:e14a8d2300c4a4ccf0bb0f"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
+    let allUsers = [];
+
+    // 실시간 유저 점수 및 MVP 감시
+    onSnapshot(collection(db, "rm_users"), (snapshot) => {
+      allUsers = [];
+      let teamA = 0, teamB = 0;
+
+      snapshot.forEach((docSnap) => {
+        const u = docSnap.data();
+        const c = Number(u.coins) || 0;
+        if (u.team === "A") teamA += c;
+        if (u.team === "B") teamB += c;
+        allUsers.push({ id: docSnap.id, name: u.name, team: u.team, coins: c });
+      });
+
+      document.getElementById("score-A").innerText = teamA;
+      document.getElementById("score-B").innerText = teamB;
+
+      const sorted = [...allUsers].sort((a, b) => b.coins - a.coins);
+      const mvpList = document.getElementById("mvp-list");
+      mvpList.innerHTML = sorted.slice(0, 5).map((u, i) => `
+        <li class="mvp-item">
+          <span><span class="rank-badge">${i + 1}위</span> [${u.team}팀] ${u.name}</span>
+          <span style="color:#facc15;">🪙 ${u.coins}</span>
+        </li>
+      `).join('') || '<li class="mvp-item">참가자 대기 중...</li>';
+    });
+
+    // 실시간 로그 감시 (최신 4개)
+    const logQuery = query(collection(db, "rm_logs"), orderBy("timestamp", "desc"), limit(4));
+    onSnapshot(logQuery, (snapshot) => {
+      const logList = document.getElementById("log-list");
+      if (snapshot.empty) {
+        logList.innerHTML = '<div class="log-item">실시간 작전 로그 대기 중...</div>';
+        return;
+      }
+      const items = [];
+      snapshot.forEach((docSnap) => {
+        items.push(`<div class="log-item">• ${docSnap.data().text}</div>`);
+      });
+      logList.innerHTML = items.join('');
+    });
+
+    // 벽 기대기 파울 차감
+    window.givePenalty = async (team) => {
+      if (!confirm(`${team}팀에게 벽 기대기 반칙 페널티(-1 코인)를 부여할까요?`)) return;
+
+      let targetUser = null;
+      allUsers.forEach((u) => {
+        if (u.team === team && u.coins > 0) {
+          if (!targetUser || u.coins > targetUser.coins) {
+            targetUser = u;
+          }
+        }
+      });
+
+      if (targetUser) {
+        await updateDoc(doc(db, "rm_users", targetUser.id), { coins: targetUser.coins - 1 });
+      }
+
+      await addDoc(collection(db, "rm_logs"), {
+        text: `🚨 [진행자 경고] ${team}팀 벽 기대기 반칙! 팀 코인 -1 차감`,
+        timestamp: Date.now()
+      });
+    };
+
+    // 테스트 데이터 전체 초기화
+    window.resetGame = async () => {
+      if (!confirm("모든 참가자 점수와 로그를 초기화하시겠습니까?")) return;
+      const usersSnap = await getDocs(collection(db, "rm_users"));
+      for (const d of usersSnap.docs) await deleteDoc(doc(db, "rm_users", d.id));
+
+      const logsSnap = await getDocs(collection(db, "rm_logs"));
+      for (const d of logsSnap.docs) await deleteDoc(doc(db, "rm_logs", d.id));
+
+      alert("초기화 완료!");
+    };
+  </script>
+</body>
+</html>
